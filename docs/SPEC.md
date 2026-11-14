@@ -1,81 +1,107 @@
-# Spec: "agentes" Herdr layout with an activity board
+# Spec: Agent Board for Herdr
 
-Source of truth for the look: `docs/prototipos.html`, view **D · Tablero de actividad**
-(open it in a browser). The user approved that view, minus two things already removed
-from it: no "last command / last output line" box in cards, and no progress/spinner
-line at the bottom of cards.
+Current public layout: `layouts/agent-board.json`. Static visual reference:
+`docs/prototype.html`, view **D · Activity board** (default; `?preview` hides
+prototype controls). Recipe: `RECIPE.md`. Requirement history:
+`odd/tasks/agent-board.md`. Specs 2 and 3 explain the drawer/rail evolution;
+Spec 3 and the current source supersede the initial floating drawer.
 
-## Repo layout (mirrors the Herdr home `~/.config/herdr-app`)
+## Repository structure
 
+```text
+layouts/agent-board.json       public layout, no personal mods
+mods/agent-board/              activity board (main.js, mod.json)
+mods/agent-strip/              active-agent status strip (main.js, mod.json)
+install.sh                    copies only the above files; checks both mods
+README.md                     installation, usage, checks, limits
+RECIPE.md                     gallery build brief
+preview.png                   neutral prototype screenshot (publication asset)
 ```
-layouts/agentes.json          the layout
-mods/tablero-agentes/         the activity board (main.js, mod.json)
-mods/tira-agentes/            the active-agents strip for the tab bar row (main.js, mod.json)
-install.sh                    copies layouts/ and mods/ into the Herdr home
-README.md                     what it is, install, switch (Ctrl+Shift+L), dependencies
-```
 
-Herdr docs: `~/.config/herdr-app/AGENTS.md` (sections "Layouts", "Mods", "The herdr
-module"), API: `~/.config/herdr-app/herdr.d.ts`, UI builders: `~/.config/herdr-app/gpui-kit.d.ts`.
-Reference implementation to borrow from (read only, never edit):
-`~/.config/herdr-app/mods/agents/main.js` (agents(), terminals() sub-agent tree,
-status icons, `this.changed` state-change timestamps, `setAgentOrder`, `pane.focus`).
+The repository's publishing name is `herdr-agent-board`. The layout's installed
+name is `agent-board`. Gallery discovery requires the GitHub topic `herdr-layout`.
+Herdr's local API documentation lives in `~/.config/herdr-app/AGENTS.md`,
+`herdr.d.ts`, and `gpui-kit.d.ts`. Do not modify shipped mods or existing layouts.
 
-## S1 · Layout `layouts/agentes.json`
+## S1 · Layout
 
-Start from `~/.config/herdr-app/layouts/mi-layout.json` (keep its look: `titlebar: "none"`,
-`terminal_padding`, root `background`/`divider`, pane frame of `main`, the brand
-`workspace-chrome` block and footer, and the **status row with the `mi-boton`
-"Dictar" block at 168px** — the dictation mod must stay applied). Changes:
-- `sidebar`: 250px, holding brand, **only `spaces`** (no agents block), footer.
-- `tabs` row: a `row` containing the shipped `tabs` block (weight 1) and the
-  `tira-agentes` block (fixed px, about 420, min sensible) — keep `window_drag` on the tabs block.
-- `work-body` row: `main` (tab active) + a right column `board` of 360px (min 280, max 600)
-  showing `tablero-agentes` in a card (surface background, border, radius 10), then
-  the existing `panel` (files/changes stack, hidden by default) after it.
-- Root `"preview": "layouts/agentes.svg"` optional; skip unless trivial.
+- Root row: `canvas`, 1px `border` divider, no system titlebar, traffic lights
+  at [12, 16], terminal padding [14, 12]. Theme/fonts follow Herdr settings.
+- Left `sidebar`: 250px, min 44, max 480, `chrome`, non-resizable internally.
+  `workspace-chrome` brand (46px), `spaces` (weight 1, min 90), then
+  `workspace-chrome` with `{footer: true}` (69px).
+- Work column: shipped `tabs` at 42px with window dragging; work body with
+  8px padding/gap; status row at 28px.
+- Main terminal block: active tab, pane headers from `pane` at 30px, always
+  visible at top; `background`, 1px `border`, focused 1px `accent`, radius 10,
+  gap 8, lone pane framed.
+- Right `board`: 360px, min 48, max 600, `surface`, 1px `border`, radius 10,
+  containing `agent-board`. It becomes 52px when collapsed.
+- Optional `panel`: hidden initially, 368px, min 280/max 900, stack with `files`
+  selected and `changes` as the other child.
+- Public status row: `workspace-status` weight 1, then `agent-strip` at 440px,
+  min 220, with window dragging. **No dictate block or personal-mod dependency.**
 
-## S2 · Mod `tablero-agentes`
+## S2 · Activity board
 
-Sections, top to bottom, each with an uppercase header colored by theme status color
-and a count on the right:
-1. **"Te necesitan"** — agents with status `blocked` or `done`. Card per agent: status
-   dot, bold name, a small "Ver ↵" button; meta line `space_name · <"Bloqueado" | "Terminó · sin revisar"> · <age>`.
-   Clicking the card or the button runs `pane.focus {pane}`.
-2. **"Trabajando"** — status `working`. Card: spinner (`mods/workspace-chrome/spinner.svg` `.spin(900)`),
-   bold name, age on the right; meta `space_name · branch` (branch from the space/pane if available);
-   live sub-agents (terminals() with `parent === address`, state live) as small chips with their own
-   status icon; clicking a chip focuses it if it has a pane, else `terminal.peek`. Focused agent's card gets accent border.
-   Header count reads e.g. `2 · 2 sub-agentes`.
-3. **"En reposo"** — status `idle`, bucketed by time since its last state change:
-   "Última hora" (< 1h, normal rows), "Hoy" (< 24h, dimmer rows), "Dormidos · más de 1 día"
-   (chips `name · age`, faded, the bucket header folds/unfolds it, folded by default is NOT required).
-   Rows: idle ring, name, age; click focuses.
-Rules: no last-output box, no progress line. Use `theme()` colors only (done, working,
-blocked, idle, muted, dim, accent, surface, background, border, hover, raised). No redraw timers for
-animation; a 30 s `cx.timer.every` for ages is fine. Call `setAgentOrder` with the shown order.
-Name of an agent: same logic as the shipped agents mod (space name / tab title); keep it simple.
-Empty state: a muted line "Sin agentes todavía".
+Sections use uppercase 11px headings with theme status colors and counts:
 
-## S3 · Mod `tira-agentes`
+1. **Needs you**: `blocked` and `done` agents. Cards contain status icon, name,
+   **Open ↵**, and space/status/age metadata (**Blocked**, **Done · unreviewed**).
+2. **Working**: working agents, spinner, name, age, space/branch, and live
+   sub-agent chips. The count includes total live sub-agents. A chip focuses its
+   pane when available, otherwise invokes `terminal.peek`.
+3. **Idle**: sorted by age: **Last hour** (<1h), **Today** (1h to <24h), and
+   **Sleeping · over 1 day** (>=24h). Recent/today use rows; sleeping uses
+   foldable chips. A current sleeping agent remains a visible row.
 
-Horizontal, right-aligned in the tab bar row, chrome background with the bottom border
-the tabs bar uses: one pill per agent that is `blocked`, `done` or `working`
-(ring: spinner for working, solid done color for done, blocked color for blocked;
-short name truncated ~14 chars; `+N` when it has live sub-agents), then a muted
-`· N en reposo`. Click a pill → `pane.focus`. Keep `window_drag` behavior unaffected
-(stop propagation on pill presses).
+Cards/rows focus the agent's pane. The current agent has selected background,
+accent border, and a 13px monitor icon (**You are here**). Names prefer meaningful
+tab/title text, then space/program/address, stripping decorative title prefixes.
+No command/output box or progress line. Empty text: **No agents yet**.
 
-## S4 · install.sh + README
+Use theme colors only in native mods: `done`, `working`, `blocked`, `idle`,
+`muted`, `dim`, `accent`, `foreground`, `surface`, `background`, `border`,
+`hover`, `raised`, `selected`, `chrome`. Working spinners use native `.spin(900)`.
+A 30-second timer updates ages. Locally persisted observation timestamps reset
+on genuine status transitions; done and idle share the age state so viewing done
+work does not reset its age. Stale absent entries expire after 30 days.
+`setAgentOrder` follows the displayed section order, omitting folded sleeping
+agents. See `SPEC-3-rail.md` for collapse and overlay behavior.
 
-`install.sh`: copy `layouts/agentes.json` and `mods/*` into `${HERDR_APP_HOME:-$HOME/.config/herdr-app}`
-(never touch other files there, never delete), then run `herdr-app check` on each mod and print
-how to switch (`herdr-app do layout.switch '{"name":"agentes"}'`). README in Spanish (neutral),
-code and comments in English.
+## S3 · Active-agent strip
 
-## Verification (required)
+`agent-strip` lives in the status row, not the tab bar. It sorts blocked, done,
+and working agents in that order, then shows `N idle`. Pills use a working
+spinner or status dot, a name truncated to 14 characters, and `+N` live children.
+The current pill gets selected/accent styling and a monitor icon. Clicks focus
+panes and stop propagation so window dragging does not interfere. Pills scroll
+horizontally when needed.
 
-- `herdr-app check <home>/mods/tablero-agentes` and `.../tira-agentes` pass.
-- After install, `herdr-app do layout.switch '{"name":"agentes"}'`, then `herdr-app status`
-  shows `"layout": "agentes"` and `"errors": []`, then `herdr-app shot /tmp/agentes.png` and LOOK at it.
-- Do not switch back or touch `mi-layout.json`. Do not edit shipped mods or other user mods.
+## S4 · Installer and local dictate option
+
+`install.sh` copies only the public layout and the two bundled mods' `main.js`
+and `mod.json` into `${HERDR_APP_HOME:-$HOME/.config/herdr-app}`. It overwrites
+these destination files for updates, never deletes anything, then runs
+`herdr-app check` on both mods. It prints layout-switch commands without
+executing them. README and other documentation are in English.
+
+If `HERDR_DICTATE_MOD` is nonempty, validate its folder name and the existing
+`$DEST/mods/$HERDR_DICTATE_MOD/main.js` before copying. Missing dependencies fail
+clearly. Python 3 generates an additional installed
+`layouts/agent-board-dictate.json` from the public layout, appending to
+`status-row` a block with id `dictate`, type `block`, `content.mod` equal to the
+variable and `size.px` 168. Never copy or publish that personal mod. Without the
+variable, leave any existing local variant alone.
+
+## Verification
+
+Repository checks: `sh -n install.sh` and
+`python3 -m json.tool layouts/agent-board.json`.
+
+Runtime checks (after installing): both native mod checks pass; switching to
+`agent-board` reports that layout and `errors: []`. With an existing dictate
+mod, optional installation and switching to `agent-board-dictate` show the
+168px local block. Exercise `agent-board.collapse`, `expand`, `peek`, `unpeek`,
+and inspect screenshots under `/tmp/herdr-shots/`. Hover must not change pane
+focus. Leave the chosen local layout expanded after verification.

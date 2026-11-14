@@ -135,7 +135,7 @@
                   "id": "activity-board",
                   "type": "block",
                   "content": {
-                    "mod": "tablero-agentes"
+                    "mod": "agent-board"
                   }
                 }
               ]
@@ -196,23 +196,13 @@
               "id": "active-agents",
               "type": "block",
               "content": {
-                "mod": "tira-agentes"
+                "mod": "agent-strip"
               },
               "size": {
                 "px": 440
               },
               "min": 220,
               "window_drag": true
-            },
-            {
-              "id": "dictar",
-              "type": "block",
-              "content": {
-                "mod": "mi-boton"
-              },
-              "size": {
-                "px": 168
-              }
             }
           ]
         }

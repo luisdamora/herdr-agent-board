@@ -11,7 +11,7 @@ function name(a) {
   return label.length > 14 ? `${label.slice(0, 13)}…` : label;
 }
 
-export default class ActiveStrip extends View {
+export default class AgentStrip extends View {
   render() {
     const t = theme();
     const list = agents();

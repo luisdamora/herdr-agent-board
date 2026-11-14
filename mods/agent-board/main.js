@@ -27,7 +27,7 @@ function statusIcon(status, t) {
     .when(status !== "idle", el => el.bg(t[status] ?? t.dim));
 }
 
-export default class ActivityBoard extends View {
+export default class AgentBoard extends View {
   init(_props, cx) {
     try { this.changed = JSON.parse(localStorage.getItem("changed") ?? "{}"); }
     catch { this.changed = {}; }
@@ -52,9 +52,9 @@ export default class ActivityBoard extends View {
   }
 
   dismiss() {
-    const id = shared("board.peek");
-    setShared("board.peek", null);
-    setShared("board.overlayHovered", false);
+    const id = shared("agent-board.peek");
+    setShared("agent-board.peek", null);
+    setShared("agent-board.overlayHovered", false);
     if (id) closeOverlay(id);
   }
 
@@ -62,22 +62,22 @@ export default class ActivityBoard extends View {
   // Hover-open stays disarmed until the pointer leaves the rail once, or the
   // overlay would open at once over the same spot and look like nothing happened.
   setCollapsed(collapsed, fromPointer = false) {
-    setShared("board.railHovered", false);
-    setShared("board.hoverArmed", !(collapsed && fromPointer));
-    if (collapsed && shared("board.collapsed") !== true) {
+    setShared("agent-board.railHovered", false);
+    setShared("agent-board.hoverArmed", !(collapsed && fromPointer));
+    if (collapsed && shared("agent-board.collapsed") !== true) {
       const width = this.boardNode()?.size?.px;
-      setShared("board.expandedWidth", width >= 280 ? width : 360);
+      setShared("agent-board.expandedWidth", width >= 280 ? width : 360);
     }
     this.dismiss();
-    setShared("board.collapsed", collapsed);
+    setShared("agent-board.collapsed", collapsed);
     run("layout.show", { id: "board" });
-    run("layout.resize", { id: "board", px: collapsed ? 52 : shared("board.expandedWidth") || 360 });
+    run("layout.resize", { id: "board", px: collapsed ? 52 : shared("agent-board.expandedWidth") || 360 });
   }
 
   syncDock(collapsed) {
     const board = this.boardNode();
     if (!board) return;
-    const px = collapsed ? 52 : shared("board.expandedWidth") || 360;
+    const px = collapsed ? 52 : shared("agent-board.expandedWidth") || 360;
     // Preserve user resizing while pinned; only repair a stale collapsed width.
     const needsResize = collapsed ? board.size?.px !== 52 : board.size?.px < 280;
     const request = `${Boolean(board.hidden)}:${needsResize}:${px}`;
@@ -123,38 +123,38 @@ export default class ActivityBoard extends View {
   }
 
   peek() {
-    if (shared("board.collapsed") !== true || shared("board.peek") || !this.railHeight) return;
-    if (shared("board.hoverArmed") === false) return;
+    if (shared("agent-board.collapsed") !== true || shared("agent-board.peek") || !this.railHeight) return;
+    if (shared("agent-board.hoverArmed") === false) return;
     const bounds = this.railBounds || this.railCardBounds();
     if (!bounds) return;
-    const id = openOverlay({ mod: "tablero-agentes", props: { peekBoard: true },
+    const id = openOverlay({ mod: "agent-board", props: { peekBoard: true },
       kind: "window", frame: "none", at: { x: bounds.x + bounds.width - 360, y: bounds.y },
       width: 360, height: bounds.height });
-    setShared("board.peek", id);
+    setShared("agent-board.peek", id);
     // The overlay covers the whole rail, so the rail never gets its pointer-exit
     // event: from here on, only the overlay's hover decides when it closes.
-    setShared("board.railHovered", false);
+    setShared("agent-board.railHovered", false);
   }
 
   hover(overlay, hovered, cx) {
-    setShared(overlay ? "board.overlayHovered" : "board.railHovered", hovered);
-    if (!overlay && !hovered) setShared("board.hoverArmed", true);
+    setShared(overlay ? "agent-board.overlayHovered" : "agent-board.railHovered", hovered);
+    if (!overlay && !hovered) setShared("agent-board.hoverArmed", true);
     if (hovered) {
       if (!overlay && this.railBounds) this.peek();
       return;
     }
     // A one-shot dismissal grace, not an animation/redraw timer.
     cx.timer.after(180, () => {
-      if (!shared("board.railHovered") && !shared("board.overlayHovered")) this.dismiss();
+      if (!shared("agent-board.railHovered") && !shared("agent-board.overlayHovered")) this.dismiss();
     });
   }
 
   close() {
     if (props()?.peekBoard) {
-      setShared("board.peek", null);
-      setShared("board.overlayHovered", false);
+      setShared("agent-board.peek", null);
+      setShared("agent-board.overlayHovered", false);
     } else {
-      setShared("board.railHovered", false);
+      setShared("agent-board.railHovered", false);
       this.dismiss();
     }
   }
@@ -180,18 +180,18 @@ export default class ActivityBoard extends View {
 
   render() {
     const overlay = props()?.peekBoard === true;
-    const collapsed = shared("board.collapsed") === true;
+    const collapsed = shared("agent-board.collapsed") === true;
     if (!overlay) this.syncDock(collapsed);
     const t = theme();
     const now = Date.now();
     const list = agents();
-    if (overlay) this.changed = shared("board.changed") || {};
+    if (overlay) this.changed = shared("agent-board.changed") || {};
     else {
       this.track(list, now);
       const snapshot = JSON.stringify(this.changed);
       if (snapshot !== this.publishedAges) {
         this.publishedAges = snapshot;
-        setShared("board.changed", this.changed);
+        setShared("agent-board.changed", this.changed);
       }
     }
     const elapsed = a => now - (this.changed[a.address]?.at ?? now);
@@ -285,7 +285,7 @@ export default class ActivityBoard extends View {
           const border = this.boardNode()?.border?.width || 0;
           this.railBounds = { x: event.bounds.x - border, y: event.bounds.y - border,
             width: event.bounds.width + 2 * border, height: event.bounds.height + 2 * border };
-          if (shared("board.railHovered")) this.peek();
+          if (shared("agent-board.railHovered")) this.peek();
         })
         .on_hover((hovered, cx) => this.hover(false, hovered, cx))
         .child(div().id("rail-pin").w_full().h(40).flex_none().flex().items_center().justify_center()
@@ -304,7 +304,7 @@ export default class ActivityBoard extends View {
     return v_flex().id(overlay ? "board-overlay" : "board-pinned").size_full()
       .when(overlay, el => el.bg(t.surface).border(1).border_color(t.border).rounded(10)
         .on_hover((hovered, cx) => this.hover(true, hovered, cx))
-        .on_mouse_move(() => { if (!shared("board.overlayHovered")) setShared("board.overlayHovered", true); })
+        .on_mouse_move(() => { if (!shared("agent-board.overlayHovered")) setShared("agent-board.overlayHovered", true); })
         .on_mouse_down("left", (_event, cx) => cx.stop_propagation()))
       .min_h(0).text_size(12.5)
       .child(h_flex().flex_none().px(8).py(6).items_center()
