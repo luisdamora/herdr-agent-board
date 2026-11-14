@@ -1,6 +1,6 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { agents, terminals, panes, spaces, theme, run, setAgentOrder } from "herdr";
+import { agents, terminals, panes, spaces, focused, theme, run, setAgentOrder } from "herdr";
 
 function age(ms) {
   const minutes = Math.floor(Math.max(0, ms) / 60000);
@@ -12,7 +12,7 @@ function age(ms) {
 
 // Prefer a meaningful tab/title, not a shell path or an automatic tab number.
 function name(a) {
-  const title = (a.title ?? "").replace(/^[^\p{L}\p{N}~/]+/u, "").trim();
+  const title = (a.title ?? "").replace(/^[^\p{L}\p{N}~/]+/u, "").replace(/^\S{1,3}\s+[-–·]\s+/u, "").trim();
   const telling = title && !/^[~/]|^[A-Za-z]:\\/.test(title) && !title.includes("@")
     && title !== a.program?.name && title.toLowerCase() !== a.program?.key;
   if (a.tab_name && !/^\d+$/.test(a.tab_name) && a.tab_name !== a.program?.name) return a.tab_name;
@@ -60,27 +60,36 @@ export default class ActivityBoard extends View {
     const list = agents();
     this.track(list, now);
     const elapsed = a => now - this.changed[a.address].at;
+    // The agent you are in: its pane has focus, or the window shows its terminal.
+    const f = focused();
+    const isCurrent = a => a.focused || (f?.pane && f.pane === a.pane) || (f?.terminal && f.terminal === a.address);
     const attention = list.filter(a => a.status === "blocked" || a.status === "done");
     const working = list.filter(a => a.status === "working");
     const idle = list.filter(a => a.status === "idle").sort((a, b) => elapsed(a) - elapsed(b));
     const recent = idle.filter(a => elapsed(a) < 3600000);
     const today = idle.filter(a => elapsed(a) >= 3600000 && elapsed(a) < 86400000);
-    const sleeping = idle.filter(a => elapsed(a) >= 86400000);
+    const sleepingAll = idle.filter(a => elapsed(a) >= 86400000);
+    const sleepingCurrent = sleepingAll.filter(isCurrent);
+    const sleeping = sleepingAll.filter(a => !isCurrent(a));
     const all = terminals();
     const paneList = panes();
     const spaceList = spaces();
     const children = a => all.filter(k => k.parent === a.address && k.state === "live");
-    setAgentOrder([...attention, ...working, ...recent, ...today, ...(this.sleepingFolded ? [] : sleeping)].map(a => a.address));
+    setAgentOrder([...attention, ...working, ...recent, ...today, ...sleepingCurrent, ...(this.sleepingFolded ? [] : sleeping)].map(a => a.address));
 
     const text = (value, color = t.muted) => div().min_w(0).truncate().text_color(color).child(value);
     const heading = (label, color, count) => h_flex().px(14).pt(12).pb(8).gap(6).items_center().justify_between()
       .text_size(11).font_semibold().child(text(label.toUpperCase(), color)).child(text(String(count), t.dim));
     const focus = a => run("pane.focus", { pane: a.pane });
     const card = a => v_flex().id(`card-${a.address}`).mx(10).mb(8).px(12).py(10).gap(4)
-      .flex_none().bg(t.background).border(1).border_color(a.focused ? t.accent : t.border).rounded(9)
+      .flex_none().bg(isCurrent(a) ? t.selected : t.background).border(isCurrent(a) ? 2 : 1)
+      .border_color(isCurrent(a) ? t.accent : t.border).rounded(9)
       .cursor_pointer().hover(el => el.bg(t.hover)).on_click(() => focus(a));
+    const here = () => div().flex_none().px(6).py(1).rounded(5).bg(t.accent).text_size(10)
+      .font_semibold().text_color(t.accent_foreground).child("AQUÍ");
     const title = a => h_flex().gap(8).items_center().child(statusIcon(a.status, t))
-      .child(div().flex_1().min_w(0).truncate().font_semibold().text_color(t.foreground).child(name(a)));
+      .child(div().flex_1().min_w(0).truncate().font_semibold().text_color(t.foreground).child(name(a)))
+      .when(isCurrent(a), el => el.child(here()));
     const subChip = k => {
       const pane = paneList.find(p => p.terminal === k.address);
       const state = list.find(a => a.address === k.address)?.status ?? k.status;
@@ -95,9 +104,13 @@ export default class ActivityBoard extends View {
         .child(statusIcon(state === "error" ? "blocked" : state || "idle", t))
         .child(text(k.name || k.template || k.program?.name || k.address, t.muted));
     };
-    const idleRow = (a, dimmer) => h_flex().id(`idle-${a.address}`).px(14).py(5).gap(8).items_center()
-      .opacity(dimmer ? 0.7 : 1).cursor_pointer().hover(el => el.bg(t.hover)).on_click(() => focus(a))
-      .child(statusIcon("idle", t)).child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(name(a)))
+    const idleRow = (a, dimmer) => h_flex().id(`idle-${a.address}`).mx(6).px(8).py(5).gap(8).items_center().rounded(7)
+      .opacity(dimmer && !isCurrent(a) ? 0.7 : 1).cursor_pointer().hover(el => el.bg(t.hover)).on_click(() => focus(a))
+      .when(isCurrent(a), el => el.bg(t.selected).border(1).border_color(t.accent))
+      .child(statusIcon("idle", t))
+      .child(div().flex_1().min_w(0).truncate().text_color(isCurrent(a) ? t.foreground : t.muted)
+        .when(isCurrent(a), el => el.font_semibold()).child(name(a)))
+      .when(isCurrent(a), el => el.child(here()))
       .child(div().flex_none().text_size(11).text_color(t.dim).child(age(elapsed(a))));
     const bucket = label => div().px(14).pt(8).pb(3).text_size(11).text_color(t.dim).child(label);
 
@@ -121,6 +134,7 @@ export default class ActivityBoard extends View {
         .child(heading("En reposo", t.idle, idle.length))
         .when(recent.length > 0, el => el.child(bucket("Última hora")).children(recent.map(a => idleRow(a, false))))
         .when(today.length > 0, el => el.child(bucket("Hoy")).children(today.map(a => idleRow(a, true))))
+        .children(sleepingCurrent.map(a => idleRow(a, false)))
         .when(sleeping.length > 0, el => el
           .child(h_flex().id("sleeping-toggle").px(14).pt(8).pb(4).items_center().justify_between().text_size(11)
             .text_color(t.dim).cursor_pointer().on_click((_e, cx) => { this.sleepingFolded = !this.sleepingFolded; cx.notify(); })
