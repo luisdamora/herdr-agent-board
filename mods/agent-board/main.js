@@ -268,7 +268,15 @@ export default class AgentBoard extends View {
         .child(statusIcon(state === "error" ? "blocked" : state || "idle", t))
         .child(text(k.name || k.template || k.program?.name || k.address, t.muted));
     };
-    const idleRow = (a, dimmer) => h_flex().id(`idle-${a.address}`).mx(6).px(8).py(5).gap(8).items_center().rounded(7)
+    // An idle agent can still have sub-agents running (it waits for their reports):
+    // keep their chips under its row so they stay one click away.
+    const idleRow = (a, dimmer) => {
+      const row = idleLine(a, dimmer);
+      const kids = children(a);
+      return kids.length === 0 ? row : v_flex().flex_none().child(row)
+        .child(h_flex().mx(6).pl(30).pr(8).pb(5).gap(5).flex_wrap().children(kids.map(subChip)));
+    };
+    const idleLine = (a, dimmer) => h_flex().id(`idle-${a.address}`).mx(6).px(8).py(5).gap(8).items_center().rounded(7)
       .opacity(dimmer && !isCurrent(a) ? 0.7 : 1).cursor_pointer().hover(el => el.bg(t.hover)).on_click(() => focus(a))
       .when(isCurrent(a), el => el.bg(t.selected).border(1).border_color(t.accent))
       .child(markers(a))
