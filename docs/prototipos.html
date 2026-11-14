@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Herdr — prototipos de layout para agentes</title>
+<style>
+  :root{
+    --canvas:#0d1017; --chrome:#11141c; --surface:#151923; --bg:#0f121a;
+    --border:#252a36; --muted:#7c8496; --fg:#d7dbe4; --accent:#ff79c6;
+    --working:#f1c35a; --done:#6aa2ff; --idle:#566070; --hover:#1b2030;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#07090d;color:var(--fg);font:13px/1.35 "Geist",system-ui,sans-serif}
+  header{display:flex;gap:16px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  header h1{font-size:15px;margin:0 12px 0 0;font-weight:600}
+  .seg{display:flex;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:3px}
+  .seg button{background:none;border:0;color:var(--muted);padding:6px 12px;border-radius:6px;cursor:pointer;font:inherit}
+  .seg button.on{background:var(--hover);color:var(--fg)}
+  label.tg{display:flex;gap:6px;align-items:center;color:var(--muted);cursor:pointer}
+  .desc{padding:10px 20px;color:var(--muted);min-height:38px}
+  .desc b{color:var(--fg)}
+  .stage{padding:0 20px 24px}
+  .win{height:calc(100vh - 150px);min-height:560px;background:var(--canvas);border:1px solid var(--border);
+       border-radius:10px;overflow:hidden;display:flex}
+  .col{display:flex;flex-direction:column;min-width:0;min-height:0}
+  .chrome{background:var(--chrome)}
+  .bl{border-right:1px solid var(--border)}
+  .bt{border-top:1px solid var(--border)}
+  .m{color:var(--muted)}
+  .brand{height:46px;display:flex;align-items:center;gap:8px;padding:0 14px;font-weight:600}
+  .sect{font-size:12px;color:var(--muted);padding:10px 14px 6px;display:flex;justify-content:space-between}
+  .list{overflow:auto;flex:1;min-height:0}
+  .it{display:flex;align-items:center;gap:8px;padding:6px 14px;white-space:nowrap;overflow:hidden}
+  .it:hover{background:var(--hover)}
+  .it.sel{background:var(--hover);border-radius:6px;margin:0 6px;padding:6px 8px}
+  .it .n{overflow:hidden;text-overflow:ellipsis;flex:0 1 auto}
+  .it .s{color:var(--muted);overflow:hidden;text-overflow:ellipsis;flex:1;text-align:right;font-size:12px}
+  .it.sub{padding-left:34px}
+  .badge{width:18px;height:18px;border-radius:4px;display:grid;place-items:center;font-size:11px;color:#fff;flex:none}
+  .grp{font-size:11px;padding:8px 14px 4px}
+  .dot{width:9px;height:9px;border-radius:50%;flex:none;border:2px solid var(--idle)}
+  .dot.working{border-color:var(--working);border-right-color:transparent;animation:spin 1s linear infinite}
+  .dot.done{background:var(--done);border-color:var(--done)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .age{color:var(--muted);font-size:11px;flex:none}
+  .foot{height:69px;padding:10px 14px;color:var(--muted);display:flex;flex-direction:column;gap:8px}
+  .tabsbar{height:42px;display:flex;align-items:center;gap:6px;padding:0 10px;border-bottom:1px solid var(--border)}
+  .pill{padding:4px 10px;border-radius:6px;color:var(--muted)} .pill.on{background:var(--surface);color:var(--fg)}
+  .tabsbar .sp{flex:1}
+  .body{flex:1;padding:8px;gap:8px;display:flex;min-height:0}
+  .panes{flex:1;display:grid;gap:8px;min-width:0}
+  .pane{background:var(--bg);border:1px solid var(--border);border-radius:10px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .pane.focus{border-color:var(--accent)}
+  .ph{height:30px;display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--muted);border-bottom:1px solid var(--border);font-size:12px;white-space:nowrap;overflow:hidden}
+  .ph b{color:var(--fg);font-weight:500}
+  .term{flex:1;padding:12px 14px;font:12px/1.5 "JetBrains Mono",monospace;color:#c9cfdb;overflow:hidden}
+  .term .p{color:var(--accent)} .term .y{color:var(--working)}
+  .side{background:var(--surface);border:1px solid var(--border);border-radius:10px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .stab{display:flex;gap:2px;padding:6px;border-bottom:1px solid var(--border)}
+  .stab span{padding:4px 10px;border-radius:6px;color:var(--muted);cursor:pointer}
+  .stab span.on{background:var(--hover);color:var(--fg)}
+  .status{height:28px;display:flex;align-items:center;gap:16px;padding:0 12px;color:var(--muted);font-size:12px;border-top:1px solid var(--border)}
+  .status .sp{flex:1}
+  .w{font-size:11px;color:var(--accent);opacity:.8;margin-left:6px}
+  /* D · tablero de actividad */
+  .hd{display:flex;align-items:center;gap:8px;padding:12px 14px 8px;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+  .hd .c{margin-left:auto;font-size:11px;color:var(--muted);letter-spacing:0;text-transform:none}
+  .card{margin:0 10px 8px;padding:10px 12px;border:1px solid var(--border);border-radius:9px;background:var(--bg);position:relative;overflow:hidden;cursor:pointer}
+  .card:hover{border-color:#39405a}
+  .card.att{border-color:#3a5aa8;background:linear-gradient(90deg,#16213a,var(--bg) 70%)}
+  .card.att::before,.card.wk::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--done)}
+  .card.wk::before{background:var(--working)}
+  .card.sel{border-color:var(--accent)}
+  .card .t{display:flex;align-items:center;gap:8px}
+  .card .t b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .card .t .age{margin-left:auto}
+  .card .meta{color:var(--muted);font-size:11.5px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card .last{font:11px/1.4 "JetBrains Mono",monospace;color:#9aa3b5;margin-top:7px;padding:5px 7px;background:#0b0e14;border-radius:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card .chips{display:flex;gap:5px;margin-top:7px;flex-wrap:wrap}
+  .chip{font-size:11px;padding:2px 7px;border-radius:99px;background:#20263a;color:#c9cfdb;display:flex;align-items:center;gap:5px}
+  .bar{height:2px;margin-top:8px;background:#20263a;border-radius:2px;overflow:hidden}
+  .bar i{display:block;height:100%;width:35%;background:var(--working);animation:slide 1.6s ease-in-out infinite}
+  @keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
+  .act{margin-left:auto;font-size:11px;padding:2px 8px;border-radius:5px;background:#2a3a66;color:#cfe0ff}
+  .rest .it{padding:4px 14px;font-size:12.5px;opacity:.85}
+  .rest .it .n{flex:1}
+  .bucket{font-size:11px;color:var(--muted);padding:8px 14px 2px;display:flex;justify-content:space-between;cursor:pointer}
+  .dorm{display:flex;flex-wrap:wrap;gap:5px;padding:4px 14px 10px}
+  .dorm .chip{opacity:.55;background:#171b26}
+  .strip{display:flex;gap:6px;align-items:center;margin-left:10px}
+  .av{display:flex;align-items:center;gap:6px;padding:3px 9px 3px 4px;border-radius:99px;background:var(--surface);border:1px solid var(--border);font-size:11.5px;white-space:nowrap}
+  .av .ring{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:10px;background:#20263a;border:2px solid var(--working)}
+  .av.done .ring{border-color:var(--done)}
+  .av .ring.spin{border-right-color:transparent;animation:spin 1.2s linear infinite}
+  .spill{font-size:10px;padding:1px 6px;border-radius:99px;margin-left:auto;flex:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Herdr · prototipos</h1>
+  <div class="seg" id="seg">
+    <button data-v="actual">Actual (mi-layout)</button>
+    <button data-v="a">A · Agentes a la derecha</button>
+    <button data-v="b">B · Sidebar rebalanceada</button>
+    <button data-v="c">C · Panel con pestañas</button>
+    <button data-v="d" class="on">D · Tablero de actividad ✨</button>
+  </div>
+  <label class="tg"><input type="checkbox" id="grid"> Centro en rejilla 2×2</label>
+</header>
+<div class="desc" id="desc"></div>
+<div class="stage"><div class="win" id="win"></div></div>
+
+<script>
+const SPACES = [
+  ["N","#3b6fd8","nexus_pos_android",""],
+  ["C","#8b5cf6","caprinosol-mission-control",""],
+  ["R","#22a06b","riseeing-stack-monorepo",""],
+  [null,null,"feat-enhanced-flow","feat/enhanced-flow"],
+  ["F","#8b5cf6","fpc2-stack-monorepo","feat/canciones-dedicadas"],
+  [null,null,"feat-revision-2026-11-13","feat/revision-2026-11-13"],
+  ["C","#14b8a6","caprinosol-general",""],
+  ["C","#f97316","caprinosol_metacognition","docs/piece-analysis-view-close"],
+  ["P","#3b82f6","pi-elephant-goldfish-model","",true],
+  ["N","#14b8a6","nexus_pos_stack_monorepo","↓3"],
+  [null,null,"feat-migracion-terminal-v2","feat/migracion-terminal-v2-golang"],
+  [null,null,"feat-fix-situacion-relacion","feat/fix-situacion-relacion"],
+];
+const AGENTS = [
+  ["Done",[["feat-migracion-terminal","π · feat-migracion","<1m","done"]]],
+  ["Working",[["pi-elephant-goldfish-model","π · pi-elephant-goldfish-model","<1m","working",true],
+              ["feat-revision-2026-11-13","π · feat-revision-2026-11-13","3m","working"],
+              ["odd-cartagena","","","working",false,true],
+              ["odd-pdp-movil","","","working",false,true]]],
+  ["Idle",[["caprinosol-mission-control","π · caprinosol-mission-control","53m","idle"],
+           ["nexus","π · nexus","19h","idle"],
+           ["caprinosol-mission-control","π · caprinosol-mission-control","23h","idle"],
+           ["caprinosol_metacognition","π · caprinosol_metacognition","1d","idle"],
+           ["feat-enhanced-flow","π · Stabilize search-to-booking","2d","idle"],
+           ["fpc2-stack-monorepo","π · fpc2-stack-monorepo","2d","idle"],
+           ["nexus_pos_android","π · nexus_pos_android","3d","idle"]]],
+];
+const FILES = [".atl/","agents/","docs/","odd/","resources/","scripts/","skills/",".gitignore","LICENSE","NOTICE","README.md","UPSTREAM.json","package.json"];
+const GCOL = {Done:"var(--done)",Working:"var(--working)",Idle:"var(--muted)"};
+
+const spaces = () => `<div class="sect">Spaces <span>+</span></div><div class="list">${SPACES.map(([l,c,n,s,sel])=>
+  l?`<div class="it ${sel?'sel':''}"><span class="badge" style="background:${c}">${l}</span><span class="n">${n}</span><span class="s">${s}</span></div>`
+   :`<div class="it sub"><span class="m">⑂</span><span class="n">${n}</span><span class="s">${s}</span></div>`).join("")}</div>`;
+const agents = (head=true) => `${head?`<div class="sect">Agents <span>◷</span></div>`:""}<div class="list">${AGENTS.map(([g,xs])=>
+  `<div class="grp" style="color:${GCOL[g]}">${g} ${xs.filter(x=>!x[5]).length}</div>`+xs.map(([n,s,a,st,sel,sub])=>
+  `<div class="it ${sel?'sel':''} ${sub?'sub':''}">${sub?'└':'<b>π</b>'}<span class="n">${n}</span><span class="s">${s}</span><span class="age">${a}</span><span class="dot ${st}"></span></div>`).join("")).join("")}</div>`;
+const files = () => `<div class="sect">Files <span>pi-elephant-goldfish-model</span></div><div class="list">${FILES.map(f=>`<div class="it">${f.endsWith("/")?"▸ 📁":"  📄"} <span class="n">${f.replace("/","")}</span></div>`).join("")}</div>`;
+const brand = () => `<div class="brand">🐑 Herdr<span style="flex:1"></span><span class="m">⌕ ▯</span></div>`;
+const foot = () => `<div class="foot bt"><span>⚙ Settings</span><span>+ Add machine</span></div>`;
+const tabs = (extra="") => `<div class="tabsbar"><span class="pill on">π 1 ×</span><span class="pill">›_ 2</span><span class="sp"></span>${extra}<span class="m">− ▢ ×</span></div>`;
+const status = () => `<div class="status"><span>▭ This computer</span><span>⑂ main</span><span>● 10 agents</span><span class="sp"></span><span>Ctrl+Shift+P commands</span><span>🎙 Dictar</span></div>`;
+
+const PANES = [
+  ["pi-elephant-goldfish-model","working",true],
+  ["feat-revision-2026-11-13","working"],
+  ["feat-migracion-terminal","done"],
+  ["odd-cartagena","working"],
+];
+function pane([name,st,focus]){
+  return `<div class="pane ${focus?'focus':''}"><div class="ph"><b>π</b> Pi <span>/media/ryzen/codex/…/${name}</span><span style="flex:1"></span><span class="dot ${st}"></span></div>
+  <div class="term"><span class="p">✿ ${name}</span> │ main │ <span class="y">🔥 YOLO</span>  <span class="m">claude-opus-5-5 · medium</span><br><br>
+  <span class="m">Thinking…</span><br><br><span class="y">$ herdr-app ls</span><br>{ "spaces": [ … ] }<br><span class="m">Took 0.0s</span><br><br>
+  <span class="p">›</span> <span class="m">type, or / for commands</span></div></div>`;
+}
+function center(grid){
+  const ps = grid?PANES:PANES.slice(0,1);
+  return `<div class="panes" style="grid-template-columns:${grid?'1fr 1fr':'1fr'};grid-template-rows:${grid?'1fr 1fr':'1fr'}">${ps.map(pane).join("")}</div>`;
+}
+
+// ---------- D · Tablero de actividad ----------
+const ATT = [["feat-migracion-terminal","nexus_pos_stack_monorepo","Terminó · sin revisar","<1m","✓ Tests verdes, PR listo para abrir"]];
+const WORK = [
+  ["pi-elephant-goldfish-model","pi-elephant-goldfish-model · main","<1m","$ herdr-app ls",[],true],
+  ["feat-revision-2026-11-13","fpc2-stack-monorepo · feat/revision","3m","Thinking… revisando T4 · S7-S9",["odd-cartagena","odd-pdp-movil"]],
+];
+const RECENT = [["caprinosol-mission-control","53m"]];
+const TODAY = [["nexus","19h"],["caprinosol-mission-control","23h"]];
+const DORM = [["caprinosol_metacognition","1d"],["feat-enhanced-flow","2d"],["fpc2-stack-monorepo","2d"],["nexus_pos_android","3d"]];
+
+const board = () => `<div class="list">
+  <div class="hd" style="color:var(--done)">● Te necesitan <span class="c">${ATT.length}</span></div>
+  ${ATT.map(([n,sp,st,a,l])=>`<div class="card att"><div class="t"><span class="dot done"></span><b>${n}</b><span class="act">Ver ↵</span></div>
+    <div class="meta">${sp} · ${st} · ${a}</div></div>`).join("")}
+  <div class="hd" style="color:var(--working)">◐ Trabajando <span class="c">${WORK.length} · 2 sub-agentes</span></div>
+  ${WORK.map(([n,sp,a,l,subs,sel])=>`<div class="card wk ${sel?'sel':''}"><div class="t"><span class="dot working"></span><b>${n}</b><span class="age">${a}</span></div>
+    <div class="meta">${sp}</div>
+    ${subs.length?`<div class="chips">${subs.map(s=>`<span class="chip"><span class="dot working" style="width:7px;height:7px"></span>${s}</span>`).join("")}</div>`:""}</div>`).join("")}
+  <div class="hd" style="color:var(--muted)">○ En reposo <span class="c">${RECENT.length+TODAY.length+DORM.length}</span></div>
+  <div class="rest">
+    <div class="bucket"><span>Última hora</span></div>
+    ${RECENT.map(([n,a])=>`<div class="it"><span class="dot"></span><span class="n">${n}</span><span class="age">${a}</span></div>`).join("")}
+    <div class="bucket"><span>Hoy</span></div>
+    ${TODAY.map(([n,a])=>`<div class="it" style="opacity:.7"><span class="dot"></span><span class="n">${n}</span><span class="age">${a}</span></div>`).join("")}
+    <div class="bucket"><span>Dormidos · más de 1 día</span><span>${DORM.length} ▾</span></div>
+    <div class="dorm">${DORM.map(([n,a])=>`<span class="chip" title="${a}">${n} · ${a}</span>`).join("")}</div>
+  </div></div>`;
+
+const strip = () => `<div class="strip">
+  <span class="av done"><span class="ring">π</span>feat-migracion <span style="color:var(--done)">●</span></span>
+  <span class="av"><span class="ring spin"></span>pi-elephant</span>
+  <span class="av"><span class="ring spin"></span>feat-revision <span class="m">+2</span></span>
+  <span class="m" style="font-size:11px">· 7 en reposo</span></div>`;
+
+const spacesLive = () => `<div class="sect">Spaces <span>+</span></div><div class="list">${SPACES.map(([l,c,n,s,sel])=>{
+  const st = /migracion-terminal/.test(n)?"done":/pi-elephant|feat-revision|fpc2/.test(n)?"working":null;
+  const tag = st==="working"?`<span class="spill" style="background:#3a3220;color:var(--working)">trabajando</span>`
+            : st==="done"?`<span class="spill" style="background:#1d2a48;color:#9cc0ff">listo</span>`:"";
+  return l?`<div class="it ${sel?'sel':''}" style="${st?'':'opacity:.6'}"><span class="badge" style="background:${c}">${l}</span><span class="n">${n}</span>${tag}</div>`
+          :`<div class="it sub" style="${st?'':'opacity:.6'}"><span class="m">⑂</span><span class="n">${n}</span>${tag}</div>`;}).join("")}</div>`;
+
+const V = {
+  actual:{d:"<b>Actual:</b> sidebar de 480px con Spaces y Agents a 50/50; Files a la derecha. Los dos listados quedan cortos y con scroll, y la terminal pierde ancho.",
+    r:g=>`<div class="col chrome bl" style="width:480px">${brand()}<div class="col" style="flex:1"><div class="col" style="flex:1">${spaces()}</div><div class="col bt" style="flex:1">${agents()}</div></div>${foot()}</div>
+      <div class="col" style="flex:1">${tabs('<span class="pill on">📄 Files</span><span class="pill">⑂ Changes</span>')}<div class="body">${center(g)}<div class="side" style="width:368px">${files()}</div></div>${status()}</div>`},
+  a:{d:"<b>A · Agentes a la derecha:</b> izquierda de 260px solo con Spaces; a la derecha, Agents (60%) sobre Files/Changes (40%). Separa “dónde trabajo” de “quién está trabajando”.",
+    r:g=>`<div class="col chrome bl" style="width:260px">${brand()}<div class="col" style="flex:1">${spaces()}</div>${foot()}</div>
+      <div class="col" style="flex:1">${tabs()}<div class="body">${center(g)}
+        <div class="col" style="width:340px;gap:8px"><div class="side" style="flex:3">${agents()}</div>
+        <div class="side" style="flex:2"><div class="stab"><span class="on">Files</span><span>Changes</span></div>${files()}</div></div></div>${status()}</div>`},
+  b:{d:"<b>B · Sidebar rebalanceada:</b> la misma estructura, con la sidebar a 320px y Agents (peso 2) el doble de alto que Spaces (peso 1). Es el cambio mínimo.",
+    r:g=>`<div class="col chrome bl" style="width:320px">${brand()}<div class="col" style="flex:1"><div class="col" style="flex:1">${spaces()}</div><div class="col bt" style="flex:2">${agents()}</div></div>${foot()}</div>
+      <div class="col" style="flex:1">${tabs('<span class="pill on">📄 Files</span><span class="pill">⑂ Changes</span>')}<div class="body">${center(g)}<div class="side" style="width:340px">${files()}</div></div>${status()}</div>`},
+  c:{d:"<b>C · Panel con pestañas:</b> izquierda solo con Spaces; a la derecha, una columna con pestañas Agents | Files | Changes, cada una a todo el alto. Tiene más espacio por lista, pero se ve una sola a la vez.",
+    r:g=>`<div class="col chrome bl" style="width:260px">${brand()}<div class="col" style="flex:1">${spaces()}</div>${foot()}</div>
+      <div class="col" style="flex:1">${tabs()}<div class="body">${center(g)}
+        <div class="side" style="width:340px"><div class="stab" id="ctabs"><span class="on" data-t="agents">Agents</span><span data-t="files">Files</span><span data-t="changes">Changes</span></div><div class="col" id="cbody" style="flex:1">${agents(false)}</div></div></div>${status()}</div>`},
+  d:{d:"<b>D · Tablero de actividad:</b> los agentes se ordenan por <i>lo que te piden</i>, no por nombre. Arriba, <b style='color:var(--done)'>Te necesitan</b> (terminados sin revisar o bloqueados), con un botón para ir. Luego <b style='color:var(--working)'>Trabajando</b>, con el space, la rama y sus sub-agentes. Abajo, <b>En reposo</b> se va comprimiendo con el tiempo: la última hora se ve como una fila, lo de hoy más tenue y lo de más de 1 día como chips. Además, una tira en la barra de tabs muestra los activos aunque cierres el panel, y los Spaces sin actividad aparecen atenuados.",
+    r:g=>`<div class="col chrome bl" style="width:250px">${brand()}<div class="col" style="flex:1">${spacesLive()}</div>${foot()}</div>
+      <div class="col" style="flex:1">${tabs(strip())}<div class="body">${center(g)}
+        <div class="side" style="width:360px">${board()}</div></div>${status()}</div>`},
+};
+
+let cur="d";
+function render(){
+  const g=document.getElementById("grid").checked;
+  document.getElementById("desc").innerHTML=V[cur].d+(g?' <span class="w">+ rejilla 2×2: varios agentes visibles a la vez</span>':"");
+  document.getElementById("win").innerHTML=V[cur].r(g);
+  const ct=document.getElementById("ctabs");
+  if(ct) ct.onclick=e=>{const t=e.target.dataset.t;if(!t)return;
+    ct.querySelectorAll("span").forEach(s=>s.classList.toggle("on",s.dataset.t===t));
+    document.getElementById("cbody").innerHTML=t==="agents"?agents(false):t==="files"?files():`<div class="sect">Changes</div><div class="it m">Sin cambios</div>`;};
+}
+document.getElementById("seg").onclick=e=>{const v=e.target.dataset.v;if(!v)return;cur=v;
+  document.querySelectorAll("#seg button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));render();};
+document.getElementById("grid").onchange=render;
+render();
+</script>
+</body>
+</html>
