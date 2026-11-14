@@ -58,7 +58,12 @@ export default class ActivityBoard extends View {
     if (id) closeOverlay(id);
   }
 
-  setCollapsed(collapsed) {
+  // fromPointer: the click that collapsed it leaves the pointer over the new rail.
+  // Hover-open stays disarmed until the pointer leaves the rail once, or the
+  // overlay would open at once over the same spot and look like nothing happened.
+  setCollapsed(collapsed, fromPointer = false) {
+    setShared("board.railHovered", false);
+    setShared("board.hoverArmed", !(collapsed && fromPointer));
     if (collapsed && shared("board.collapsed") !== true) {
       const width = this.boardNode()?.size?.px;
       setShared("board.expandedWidth", width >= 280 ? width : 360);
@@ -119,6 +124,7 @@ export default class ActivityBoard extends View {
 
   peek() {
     if (shared("board.collapsed") !== true || shared("board.peek") || !this.railHeight) return;
+    if (shared("board.hoverArmed") === false) return;
     const bounds = this.railBounds || this.railCardBounds();
     if (!bounds) return;
     const id = openOverlay({ mod: "tablero-agentes", props: { peekBoard: true },
@@ -129,6 +135,7 @@ export default class ActivityBoard extends View {
 
   hover(overlay, hovered, cx) {
     setShared(overlay ? "board.overlayHovered" : "board.railHovered", hovered);
+    if (!overlay && !hovered) setShared("board.hoverArmed", true);
     if (hovered) {
       if (!overlay && this.railBounds) this.peek();
       return;
@@ -301,7 +308,7 @@ export default class ActivityBoard extends View {
         .child(div().id("board-toggle").w(28).h(28).flex_none().rounded(5).cursor_pointer()
           .tooltip(overlay ? "Pin panel" : "Collapse").hover(el => el.bg(t.hover))
           .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-          .on_click((_e, cx) => { cx.stop_propagation(); this.setCollapsed(overlay ? false : !collapsed); })
+          .on_click((_e, cx) => { cx.stop_propagation(); this.setCollapsed(overlay ? false : !collapsed, true); })
           .flex().items_center().justify_center()
           .child(svg(`mods/workspace-chrome/${overlay ? "chevron-left" : "chevron-right"}.svg`).size(16).text_color(t.accent))))
       .child(v_flex().id("activity-scroll").flex_1().min_h(0).pb(10).overflow_y_scrollbar()
