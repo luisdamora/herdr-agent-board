@@ -131,6 +131,9 @@ export default class ActivityBoard extends View {
       kind: "window", frame: "none", at: { x: bounds.x + bounds.width - 360, y: bounds.y },
       width: 360, height: bounds.height });
     setShared("board.peek", id);
+    // The overlay covers the whole rail, so the rail never gets its pointer-exit
+    // event: from here on, only the overlay's hover decides when it closes.
+    setShared("board.railHovered", false);
   }
 
   hover(overlay, hovered, cx) {
@@ -301,6 +304,7 @@ export default class ActivityBoard extends View {
     return v_flex().id(overlay ? "board-overlay" : "board-pinned").size_full()
       .when(overlay, el => el.bg(t.surface).border(1).border_color(t.border).rounded(10)
         .on_hover((hovered, cx) => this.hover(true, hovered, cx))
+        .on_mouse_move(() => { if (!shared("board.overlayHovered")) setShared("board.overlayHovered", true); })
         .on_mouse_down("left", (_event, cx) => cx.stop_propagation()))
       .min_h(0).text_size(12.5)
       .child(h_flex().flex_none().px(8).py(6).items_center()
