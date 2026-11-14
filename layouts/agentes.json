@@ -83,18 +83,6 @@
         {
           "id": "work-body",
           "type": "row",
-          "floating": [
-            {
-              "id": "board-drawer",
-              "content": {
-                "mod": "tablero-agentes",
-                "props": { "drawer": true }
-              },
-              "edge": "right",
-              "align": "start",
-              "peek": 48
-            }
-          ],
           "padding": 8,
           "gap": 8,
           "children": [
@@ -130,10 +118,11 @@
             {
               "id": "board",
               "type": "column",
+              "hidden": false,
               "size": {
                 "px": 360
               },
-              "min": 280,
+              "min": 48,
               "max": 600,
               "background": "surface",
               "border": {

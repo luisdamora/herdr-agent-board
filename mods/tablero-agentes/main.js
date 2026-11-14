@@ -1,7 +1,7 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { agents, terminals, panes, spaces, focused, theme, run, setAgentOrder,
-  props, shared, setShared, layout, placement, nextCommand } from "herdr";
+  props, shared, setShared, layout, openOverlay, closeOverlay, nextCommand } from "herdr";
 
 function age(ms) {
   const minutes = Math.floor(Math.max(0, ms) / 60000);
@@ -39,25 +39,113 @@ export default class ActivityBoard extends View {
         const command = await nextCommand();
         if (command === "collapse") this.setCollapsed(true);
         if (command === "expand") this.setCollapsed(false);
+        if (command === "peek" && !props()?.overlay) this.peek();
+        if (command === "unpeek") this.dismiss();
         cx.notify();
       }
     });
   }
 
+  boardNode() {
+    const find = node => node?.id === "board" ? node : (node?.children ?? []).map(find).find(Boolean);
+    return find(layout());
+  }
+
+  dismiss() {
+    const id = shared("board.peek");
+    setShared("board.peek", null);
+    setShared("board.overlayHovered", false);
+    if (id) closeOverlay(id);
+  }
+
   setCollapsed(collapsed) {
+    if (collapsed && shared("board.collapsed") !== true) {
+      const width = this.boardNode()?.size?.px;
+      setShared("board.expandedWidth", width >= 280 ? width : 360);
+    }
+    this.dismiss();
     setShared("board.collapsed", collapsed);
-    run(collapsed ? "layout.hide" : "layout.show", { id: "board" });
+    run("layout.show", { id: "board" });
+    run("layout.resize", { id: "board", px: collapsed ? 52 : shared("board.expandedWidth") || 360 });
   }
 
   syncDock(collapsed) {
-    const find = node => node?.id === "board" ? node : (node?.children ?? []).map(find).find(Boolean);
-    const board = find(layout());
+    const board = this.boardNode();
     if (!board) return;
-    if (Boolean(board.hidden) === collapsed) this.pendingHidden = undefined;
-    else if (this.pendingHidden !== collapsed) {
-      // Hidden copies remain alive. Request once, not on every subsequent render.
-      this.pendingHidden = collapsed;
-      run(collapsed ? "layout.hide" : "layout.show", { id: "board" });
+    const px = collapsed ? 52 : shared("board.expandedWidth") || 360;
+    // Preserve user resizing while pinned; only repair a stale collapsed width.
+    const needsResize = collapsed ? board.size?.px !== 52 : board.size?.px < 280;
+    const request = `${Boolean(board.hidden)}:${needsResize}:${px}`;
+    if (!board.hidden && !needsResize) this.pendingDock = undefined;
+    else if (this.pendingDock !== request) {
+      this.pendingDock = request;
+      if (board.hidden) run("layout.show", { id: "board" });
+      if (needsResize) run("layout.resize", { id: "board", px });
+    }
+  }
+
+  railCardBounds() {
+    // Resolve the board's position from the live layout, including user-resized
+    // siblings. Size comes from the rail's layout callback, not a guessed height.
+    const walk = (node, rect) => {
+      if (node.id === "board") return { ...rect, height: this.railHeight + 2 * (node.border?.width || 0) };
+      const children = (node.children || []).filter(child => !child.hidden);
+      const border = node.border?.width || 0;
+      const padding = node.padding || 0;
+      const py = Array.isArray(padding) ? padding[0] : padding;
+      const px = Array.isArray(padding) ? padding[1] : padding;
+      const inner = { x: rect.x + px + border, y: rect.y + py + border,
+        width: rect.width - 2 * (px + border), height: rect.height - 2 * (py + border) };
+      const horizontal = node.type === "row";
+      const axis = horizontal ? "width" : "height";
+      const gap = (node.gap || 0) + (node.divider?.width || 0);
+      const fixed = children.reduce((n, child) => n + (child.size?.px || 0), 0);
+      const weight = children.reduce((n, child) => n + (child.size?.px == null ? child.size?.weight || 1 : 0), 0);
+      const available = inner[axis] - fixed - gap * Math.max(0, children.length - 1);
+      let offset = 0;
+      for (const child of children) {
+        const size = child.size?.px ?? available * (child.size?.weight || 1) / weight;
+        const bounds = { ...inner, [axis]: size,
+          [horizontal ? "x" : "y"]: inner[horizontal ? "x" : "y"] + offset };
+        const found = walk(child, bounds);
+        if (found) return found;
+        offset += size + gap;
+      }
+      return null;
+    };
+    const viewport = window.viewport_size();
+    return walk(layout(), { x: 0, y: 0, ...viewport });
+  }
+
+  peek() {
+    if (shared("board.collapsed") !== true || shared("board.peek") || !this.railHeight) return;
+    const bounds = this.railBounds || this.railCardBounds();
+    if (!bounds) return;
+    const id = openOverlay({ mod: "tablero-agentes", props: { peekBoard: true },
+      kind: "window", frame: "none", at: { x: bounds.x + bounds.width - 360, y: bounds.y },
+      width: 360, height: bounds.height });
+    setShared("board.peek", id);
+  }
+
+  hover(overlay, hovered, cx) {
+    setShared(overlay ? "board.overlayHovered" : "board.railHovered", hovered);
+    if (hovered) {
+      if (!overlay && this.railBounds) this.peek();
+      return;
+    }
+    // A one-shot dismissal grace, not an animation/redraw timer.
+    cx.timer.after(180, () => {
+      if (!shared("board.railHovered") && !shared("board.overlayHovered")) this.dismiss();
+    });
+  }
+
+  close() {
+    if (props()?.peekBoard) {
+      setShared("board.peek", null);
+      setShared("board.overlayHovered", false);
+    } else {
+      setShared("board.railHovered", false);
+      this.dismiss();
     }
   }
 
@@ -81,16 +169,22 @@ export default class ActivityBoard extends View {
   }
 
   render() {
-    const drawer = props()?.drawer === true;
+    const overlay = props()?.peekBoard === true;
     const collapsed = shared("board.collapsed") === true;
-    if (!drawer) this.syncDock(collapsed);
-    if (drawer && !collapsed) return div();
-    const mirrored = drawer && placement()?.edge === "right";
+    if (!overlay) this.syncDock(collapsed);
     const t = theme();
     const now = Date.now();
     const list = agents();
-    this.track(list, now);
-    const elapsed = a => now - this.changed[a.address].at;
+    if (overlay) this.changed = shared("board.changed") || {};
+    else {
+      this.track(list, now);
+      const snapshot = JSON.stringify(this.changed);
+      if (snapshot !== this.publishedAges) {
+        this.publishedAges = snapshot;
+        setShared("board.changed", this.changed);
+      }
+    }
+    const elapsed = a => now - (this.changed[a.address]?.at ?? now);
     // The agent you are in: its pane has focus, or the window shows its terminal.
     const f = focused();
     const isCurrent = a => a.focused || (f?.pane && f.pane === a.pane) || (f?.terminal && f.terminal === a.address);
@@ -106,45 +200,38 @@ export default class ActivityBoard extends View {
     const paneList = panes();
     const spaceList = spaces();
     const children = a => all.filter(k => k.parent === a.address && k.state === "live");
-    if (drawer === collapsed) setAgentOrder([...attention, ...working, ...recent, ...today, ...sleepingCurrent, ...(this.sleepingFolded ? [] : sleeping)].map(a => a.address));
+    if (!overlay) setAgentOrder([...attention, ...working, ...recent, ...today, ...sleepingCurrent, ...(this.sleepingFolded ? [] : sleeping)].map(a => a.address));
 
     const text = (value, color = t.muted) => div().min_w(0).truncate().text_color(color).child(value);
-    const railWidth = 48;
-    const heading = (label, color, count, railCount = count) => h_flex().flex_none()
-      .when(!drawer, el => el.px(14).pt(12).pb(8).gap(6))
-      .when(drawer, el => el.h(36).border_t(1).border_color(t.border))
+    const heading = (label, color, count) => h_flex().flex_none().px(14).pt(12).pb(8).gap(6)
       .items_center().text_size(11).font_semibold()
-      .child(div().flex_1().min_w(0).when(drawer, el => el.px(12)).child(text(label.toUpperCase(), color)))
-      .when(!drawer, el => el.child(text(String(count), t.dim)))
-      .when(drawer, el => el.child(div().w(railWidth).h_full().flex_none().bg(t.chrome)
-        .border_l(1).border_color(t.border).flex().items_center().justify_center()
-        .text_size(10).text_color(color).child(String(railCount))));
-    const focus = a => run("pane.focus", { pane: a.pane });
+      .child(div().flex_1().min_w(0).child(text(label.toUpperCase(), color)))
+      .child(text(String(count), t.dim));
+    const focus = a => {
+      if (overlay) this.dismiss();
+      run("pane.focus", { pane: a.pane });
+    };
     const railCell = a => {
       const p = a.program;
       const programIcon = p?.icon
-        ? p.tint ? svg(p.icon).size(18).text_color(t.foreground) : image(p.icon).w(18).h(18)
-        : svg("mods/workspace-chrome/terminal.svg").size(18).text_color(t.muted);
-      const badge = div().absolute().right(0).bottom(0).size(13).rounded(7).bg(t.chrome)
+        ? p.tint ? svg(p.icon).size(16).text_color(t.foreground) : image(p.icon).w(16).h(16)
+        : svg("mods/workspace-chrome/terminal.svg").size(16).text_color(t.muted);
+      const badge = div().absolute().right(-3).bottom(-3).size(8).rounded(4).bg(t.surface)
         .flex().items_center().justify_center()
         .when(a.status === "blocked", el => el.bg(t.blocked).text_color(t.background)
-          .text_size(10).font_semibold().child("!"))
-        .when(a.status !== "blocked", el => el.child(statusIcon(a.status, t)));
-      return div().id(`rail-${a.address}`).w(railWidth).flex_none().bg(t.chrome)
-        .border_l(1).border_b(1).border_color(t.border).flex().items_center().justify_center()
+          .text_size(8).font_semibold().child("!"))
+        .when(a.status !== "blocked", el => el.child(statusIcon(a.status, t).size(8)));
+      return div().id(`rail-${a.address}`).w_full().h(36).flex_none().rounded(8)
+        .opacity(isCurrent(a) || a.status !== "idle" ? 1 : elapsed(a) >= 86400000 ? 0.35 : 0.55)
+        .when(isCurrent(a), el => el.bg(t.selected).border(1).border_color(t.accent))
+        .flex().items_center().justify_center()
         .tooltip(name(a)).cursor_pointer().hover(el => el.bg(t.hover))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_click((_e, cx) => { cx.stop_propagation(); focus(a); })
-        .child(div().size(34).relative().rounded(8).flex().items_center().justify_center()
-          .opacity(isCurrent(a) || a.status !== "idle" ? 1 : elapsed(a) >= 86400000 ? 0.3 : 0.5)
-          .when(isCurrent(a), el => el.bg(t.selected).border(1).border_color(t.accent))
+        .child(div().size(16).relative().flex().items_center().justify_center()
           .child(programIcon).child(badge));
     };
-    const withRail = (a, content) => !drawer ? content : h_flex().flex_none().min_h(72).items_stretch()
-      .when(!mirrored, el => el.flex_row_reverse())
-      .child(div().flex_1().min_w(0).overflow_hidden().child(content))
-      .child(railCell(a));
-    const card = a => v_flex().id(`card-${a.address}`).mx(drawer ? 0 : 10).mb(drawer ? 0 : 8).px(12).py(10).gap(4)
+    const card = a => v_flex().id(`card-${a.address}`).mx(10).mb(8).px(12).py(10).gap(4)
       .flex_none().bg(isCurrent(a) ? t.selected : t.background).border(isCurrent(a) ? 2 : 1)
       .border_color(isCurrent(a) ? t.accent : t.border).rounded(9)
       .cursor_pointer().hover(el => el.bg(t.hover)).on_click(() => focus(a));
@@ -153,7 +240,7 @@ export default class ActivityBoard extends View {
     const markers = a => h_flex().flex_none().gap(4).items_center()
       .child(statusIcon(a.status, t)).when(isCurrent(a), el => el.child(here()));
     const title = (a, trailing) => h_flex().gap(8).items_center()
-      .when(!drawer, el => el.child(markers(a)))
+      .child(markers(a))
       .child(div().flex_1().min_w(0).truncate().font_semibold().text_color(t.foreground).child(name(a)))
       .child(trailing);
     const subChip = k => {
@@ -164,56 +251,80 @@ export default class ActivityBoard extends View {
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_click((_e, cx) => {
           cx.stop_propagation();
+          if (overlay) this.dismiss();
           if (pane) run("pane.focus", { pane: pane.pane });
           else run("terminal.peek", { terminal: k.address });
         })
         .child(statusIcon(state === "error" ? "blocked" : state || "idle", t))
         .child(text(k.name || k.template || k.program?.name || k.address, t.muted));
     };
-    const idleRow = (a, dimmer) => withRail(a, h_flex().id(`idle-${a.address}`).mx(drawer ? 0 : 6).px(8).py(5).gap(8).items_center().rounded(7)
+    const idleRow = (a, dimmer) => h_flex().id(`idle-${a.address}`).mx(6).px(8).py(5).gap(8).items_center().rounded(7)
       .opacity(dimmer && !isCurrent(a) ? 0.7 : 1).cursor_pointer().hover(el => el.bg(t.hover)).on_click(() => focus(a))
       .when(isCurrent(a), el => el.bg(t.selected).border(1).border_color(t.accent))
-      .when(!drawer, el => el.child(markers(a)))
+      .child(markers(a))
       .child(div().flex_1().min_w(0).truncate().text_color(isCurrent(a) ? t.foreground : t.muted)
         .when(isCurrent(a), el => el.font_semibold()).child(name(a)))
-      .child(div().flex_none().text_size(11).text_color(t.dim).child(age(elapsed(a)))));
-    const bucket = label => h_flex().flex_none().child(div().flex_1().px(14).pt(8).pb(3).text_size(11).text_color(t.dim).child(label))
-      .when(drawer, el => el.child(div().w(railWidth).flex_none().bg(t.chrome)));
+      .child(div().flex_none().text_size(11).text_color(t.dim).child(age(elapsed(a))));
+    const bucket = label => h_flex().flex_none().child(div().flex_1().px(14).pt(8).pb(3).text_size(11).text_color(t.dim).child(label));
 
-    return v_flex().when(drawer, el => el.w(360).h(640))
-      .when(!drawer, el => el.size_full()).min_h(0).text_size(12.5)
-      .child(h_flex().flex_none().when(!drawer, el => el.px(8)).py(6).items_center()
-        .child(div().flex_1().px(drawer ? 12 : 0).text_color(t.muted).font_semibold().child("Agents"))
-        .child(div().id("board-toggle").w(drawer ? railWidth : 28).h(28).flex_none().rounded(5).cursor_pointer()
-          .tooltip(drawer ? "Pin panel" : "Collapse").hover(el => el.bg(t.hover))
+    if (collapsed && !overlay) {
+      const groups = [attention, working, recent, today, [...sleepingCurrent, ...sleeping]].filter(group => group.length);
+      return v_flex().id("board-rail").size_full().min_h(0).bg(t.surface)
+        .on_size_change((size) => { this.railHeight = size.height; })
+        .on_mouse_move(event => {
+          const border = this.boardNode()?.border?.width || 0;
+          this.railBounds = { x: event.bounds.x - border, y: event.bounds.y - border,
+            width: event.bounds.width + 2 * border, height: event.bounds.height + 2 * border };
+          if (shared("board.railHovered")) this.peek();
+        })
+        .on_hover((hovered, cx) => this.hover(false, hovered, cx))
+        .child(div().id("rail-pin").w_full().h(40).flex_none().flex().items_center().justify_center()
+          .cursor_pointer().tooltip("Pin panel").hover(el => el.bg(t.hover))
+          .on_click(() => this.setCollapsed(false))
+          .child(svg("mods/workspace-chrome/chevron-left.svg").size(16).text_color(t.accent)))
+        .child(v_flex().id("rail-scroll").flex_1().min_h(0).overflow_y_scrollbar().gap(4)
+          .children(groups.map((group, index) => v_flex().flex_none().gap(4)
+            .when(index > 0, el => el.child(div().h(12).w_full().flex().items_center().justify_center()
+              .child(div().w(16).h(1).bg(t.border))))
+            .when(group === attention, el => el.child(div().text_size(10).text_color(attention.some(a => a.status === "blocked") ? t.blocked : t.done)
+              .flex().justify_center().child(div().px(4).rounded(4).bg(t.raised).child(String(attention.length)))))
+            .children(group.map(railCell)))));
+    }
+
+    return v_flex().id(overlay ? "board-overlay" : "board-pinned").size_full()
+      .when(overlay, el => el.bg(t.surface).border(1).border_color(t.border).rounded(10)
+        .on_hover((hovered, cx) => this.hover(true, hovered, cx))
+        .on_mouse_down("left", (_event, cx) => cx.stop_propagation()))
+      .min_h(0).text_size(12.5)
+      .child(h_flex().flex_none().px(8).py(6).items_center()
+        .child(div().flex_1().text_color(t.muted).font_semibold().child("Agents"))
+        .child(div().id("board-toggle").w(28).h(28).flex_none().rounded(5).cursor_pointer()
+          .tooltip(overlay ? "Pin panel" : "Collapse").hover(el => el.bg(t.hover))
           .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-          .on_click((_e, cx) => { cx.stop_propagation(); this.setCollapsed(!collapsed); })
+          .on_click((_e, cx) => { cx.stop_propagation(); this.setCollapsed(overlay ? false : !collapsed); })
           .flex().items_center().justify_center()
-          .child(svg(`mods/workspace-chrome/${drawer ? "chevron-left" : "chevron-right"}.svg`).size(16).text_color(t.accent))))
+          .child(svg(`mods/workspace-chrome/${overlay ? "chevron-left" : "chevron-right"}.svg`).size(16).text_color(t.accent))))
       .child(v_flex().id("activity-scroll").flex_1().min_h(0).pb(10).overflow_y_scrollbar()
         .when(list.length === 0, el => el.child(bucket("No agents yet")))
         .child(heading("Needs you", attention.some(a => a.status === "blocked") ? t.blocked : t.done, attention.length))
-        .children(attention.map(a => withRail(a, card(a)
+        .children(attention.map(a => card(a)
           .child(title(a, div().id(`view-${a.address}`).flex_none().px(8).py(3).rounded(5).bg(t.raised)
             .text_size(11).text_color(t[a.status]).on_mouse_down("left", (_e, cx) => cx.stop_propagation())
             .on_click((_e, cx) => { cx.stop_propagation(); focus(a); }).child("Open ↵")))
-          .child(text(`${a.space_name} · ${a.status === "blocked" ? "Blocked" : "Done · unreviewed"} · ${age(elapsed(a))}`)))))
-        .child(heading("Working", t.working, `${working.length} · ${working.reduce((n, a) => n + children(a).length, 0)} sub-agents`, working.length))
+          .child(text(`${a.space_name} · ${a.status === "blocked" ? "Blocked" : "Done · unreviewed"} · ${age(elapsed(a))}`))))
+        .child(heading("Working", t.working, `${working.length} · ${working.reduce((n, a) => n + children(a).length, 0)} sub-agents`))
         .children(working.map(a => {
           const branch = paneList.find(p => p.pane === a.pane)?.branch || spaceList.find(s => s.id === a.space)?.branch;
           const kids = children(a);
-          return withRail(a, card(a).child(title(a, div().flex_none().text_size(11).text_color(t.dim).child(age(elapsed(a)))))
+          return card(a).child(title(a, div().flex_none().text_size(11).text_color(t.dim).child(age(elapsed(a)))))
             .child(text([a.space_name, branch].filter(Boolean).join(" · ")))
-            .when(kids.length > 0, el => el.child(h_flex().pt(4).gap(5).flex_wrap().children(kids.map(subChip)))));
+            .when(kids.length > 0, el => el.child(h_flex().pt(4).gap(5).flex_wrap().children(kids.map(subChip))));
         }))
         .child(heading("Idle", t.idle, idle.length))
         .when(recent.length > 0, el => el.child(bucket("Last hour")).children(recent.map(a => idleRow(a, false))))
         .when(today.length > 0, el => el.child(bucket("Today")).children(today.map(a => idleRow(a, true))))
         .children(sleepingCurrent.map(a => idleRow(a, false)))
-        .when(sleeping.length > 0 && drawer, el => el
-          .child(heading("Sleeping · over 1 day", t.idle, sleeping.length))
-          .children(sleeping.map(a => idleRow(a, true))))
-        .when(sleeping.length > 0 && !drawer, el => el
+        .when(sleeping.length > 0, el => el
           .child(h_flex().id("sleeping-toggle").px(14).pt(8).pb(4).items_center().justify_between().text_size(11)
             .text_color(t.dim).cursor_pointer().on_click((_e, cx) => { this.sleepingFolded = !this.sleepingFolded; cx.notify(); })
             .child("Sleeping · over 1 day").child(`${sleeping.length} ${this.sleepingFolded ? "▸" : "▾"}`))

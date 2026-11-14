@@ -48,7 +48,8 @@ el layout automáticamente ni reinicia Herdr.
   la lista se desplaza horizontalmente. Pulsar una píldora enfoca su panel;
   el fondo libre sigue permitiendo arrastrar la ventana.
 
-El tablero puede redimensionarse entre 280 y 600 px. Files/Changes siguen
+El tablero expandido conserva el ancho elegido (360 px por defecto, hasta 600 px).
+El layout admite 48 px como mínimo para el modo contraído. Files/Changes siguen
 presentes después del tablero, ocultos por defecto y accesibles desde la
 barra de pestañas. El orden de navegación de agentes sigue el tablero.
 Los mods usan los colores del tema y animación nativa, sin consultar salidas
@@ -60,23 +61,34 @@ Las etiquetas de ambos mods están en inglés. El icono de monitor con el texto
 emergente **You are here** identifica al agente
 actual, junto al borde de acento y el fondo seleccionado.
 
-Pulsa **Collapse** en el encabezado del tablero para liberar el ancho de la
-terminal. Queda una tira de 48 px en el borde derecho, con celdas alineadas:
-icono del programa, estado superpuesto y un borde de acento para el agente actual.
-Un indicador gira para los agentes trabajando; un punto indica los terminados,
-**!** los bloqueados y un anillo los inactivos. Los iconos inactivos se atenúan;
-los dormidos aún más. Los separadores y contadores de color distinguen los grupos.
+Pulsa **Collapse** en el encabezado del tablero. La columna se reduce a una
+barra fija de 52 px que ocupa su propio espacio: nunca tapa la terminal.
+Las celdas tienen 36 px de alto, iconos de 16 px y estados de 8 px:
+un indicador gira para los agentes trabajando; un punto indica los terminados,
+**!** los bloqueados y un anillo los inactivos. El agente actual conserva el
+borde de acento y el fondo seleccionado. Los inactivos se atenúan a 0,55 y los
+dormidos a 0,35; el actual nunca se atenúa. Entre grupos solo hay un separador
+corto; únicamente **Needs you** muestra un contador, cuando no está vacío.
 Cada celda muestra el nombre del agente al pasar el puntero.
 
-Al pasar el puntero por la tira, el tablero se desliza sobre el área de trabajo,
-sin redimensionarla ni cambiar su contenido. Pulsa **Pin panel** para volver al tablero fijo. El estado se conserva al
-recargar. El drawer tiene 360 px de ancho y 640 px de alto, con desplazamiento
-para recorrer el contenido.
+Al pasar el puntero por la barra, el tablero crece hacia la izquierda sobre
+la terminal, cubriendo la barra, sin redimensionarla ni tomar el teclado.
+**S12-align:** la barra y el tablero comparten marco (fondo surface, borde de
+1 px y radio de 10 px), márgenes de 8 px y el mismo encabezado. El overlay
+mide 360 px de ancho y exactamente la altura de la barra: sus bordes derecho,
+superior e inferior coinciden. La posición se calcula a partir del layout vivo
+y del tamaño medido; al mover el puntero se usan sus límites exactos.
+Los agentes mantienen el mismo orden y el contenido permite desplazarse. Se cierra 180 ms después de abandonar tanto la barra
+como el overlay; pulsar un agente lo cierra y enfoca ese agente.
+**Pin panel** (en la barra o el overlay) restaura el tablero fijo con su ancho
+anterior. El estado contraído y el ancho expandido se conservan al recargar.
 
 También se puede usar la misma lógica desde la CLI, sin cambiar de panel:
 
 ```sh
 herdr-app do tablero-agentes.collapse
+herdr-app do tablero-agentes.peek     # abrir overlay sin mover el puntero
+herdr-app do tablero-agentes.unpeek   # cerrar solo el overlay
 herdr-app do tablero-agentes.expand
 ```
 
@@ -87,7 +99,7 @@ herdr-app check "$HOME/.config/herdr-app/mods/tablero-agentes"
 herdr-app check "$HOME/.config/herdr-app/mods/tira-agentes"
 herdr-app do layout.switch '{"name":"agentes"}'
 herdr-app status
-herdr-app shot /tmp/agentes.png
+herdr-app shot /tmp/herdr-shots/agentes.png
 ```
 
 Comprueba que el estado muestre `"layout": "agentes"` y `"errors": []` y
