@@ -35,8 +35,10 @@ export default class ActiveStrip extends View {
             .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
             .on_click((_e, cx) => { cx.stop_propagation(); run("pane.focus", { pane: a.pane }); })
             .child(icon).child(div().text_color(t.foreground).child(name(a)))
+            .when(isCurrent(a), el => el.child(svg("mods/workspace-chrome/monitor.svg").size(13).flex_none()
+              .text_color(t.accent).tooltip("You are here")))
             .when(kids > 0, el => el.child(div().text_color(t.muted).child(`+${kids}`)));
         })))
-      .child(div().flex_none().text_color(t.muted).child(`· ${idle} en reposo`));
+      .child(div().flex_none().text_color(t.muted).child(`· ${idle} idle`));
   }
 }

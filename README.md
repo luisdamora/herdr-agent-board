@@ -34,12 +34,12 @@ el layout automáticamente ni reinicia Herdr.
 
 ## Uso
 
-- **Te necesitan:** agentes bloqueados o terminados sin revisar. La tarjeta
-  y **Ver ↵** enfocan su panel.
-- **Trabajando:** nombre, espacio, rama disponible, tiempo y chips de
+- **Needs you:** agentes bloqueados o terminados sin revisar. La tarjeta
+  y **Open ↵** enfocan su panel.
+- **Working:** nombre, espacio, rama disponible, tiempo y chips de
   subagentes vivos. Un chip enfoca su panel o abre una vista previa si no tiene uno.
-- **En reposo:** filas de la última hora, filas más tenues de hoy y chips
-  para agentes con al menos un día en reposo. El encabezado Dormidos permite
+- **Idle:** filas de **Last hour**, filas más tenues de **Today** y chips
+  para agentes con al menos un día en reposo. El encabezado **Sleeping · over 1 day** permite
   plegarlos. Los tiempos se guardan por mod y se actualizan cada 30 segundos;
   en la primera instalación empiezan al observar cada agente. Revisar un
   agente terminado no reinicia su tiempo de reposo.
@@ -53,6 +53,32 @@ presentes después del tablero, ocultos por defecto y accesibles desde la
 barra de pestañas. El orden de navegación de agentes sigue el tablero.
 Los mods usan los colores del tema y animación nativa, sin consultar salidas
 de terminales, ejecutar programas ni acceder a la red.
+
+## Colapsar el panel
+
+Las etiquetas de ambos mods están en inglés. El icono de monitor con el texto
+emergente **You are here** identifica al agente
+actual, junto al borde de acento y el fondo seleccionado.
+
+Pulsa **Collapse** en el encabezado del tablero para liberar el ancho de la
+terminal. Queda una tira de 48 px en el borde derecho, con celdas alineadas:
+icono del programa, estado superpuesto y un borde de acento para el agente actual.
+Un indicador gira para los agentes trabajando; un punto indica los terminados,
+**!** los bloqueados y un anillo los inactivos. Los iconos inactivos se atenúan;
+los dormidos aún más. Los separadores y contadores de color distinguen los grupos.
+Cada celda muestra el nombre del agente al pasar el puntero.
+
+Al pasar el puntero por la tira, el tablero se desliza sobre el área de trabajo,
+sin redimensionarla ni cambiar su contenido. Pulsa **Pin panel** para volver al tablero fijo. El estado se conserva al
+recargar. El drawer tiene 360 px de ancho y 640 px de alto, con desplazamiento
+para recorrer el contenido.
+
+También se puede usar la misma lógica desde la CLI, sin cambiar de panel:
+
+```sh
+herdr-app do tablero-agentes.collapse
+herdr-app do tablero-agentes.expand
+```
 
 ## Comprobación
 
